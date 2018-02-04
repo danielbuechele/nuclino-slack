@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@danielbuechele/sharedb": "^1.1.1",
+    "node-fetch": "^2.0.0",
+    "ws": "^4.0.0"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
