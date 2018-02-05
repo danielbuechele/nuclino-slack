@@ -59,7 +59,6 @@ function subscribeBrain(connection) {
 }
 
 const cells = {};
-
 function subscribeCell(connection, name, cb) {
   const cell = connection.get('ot_cell', name);
   cell.subscribe();
@@ -89,7 +88,8 @@ function triggerUpdate(cell) {
   }, 2 * 60 * 1000);
 }
 
-(async () => {
+let killProcess = null;
+async function startWatching() {
   const token = await updateToken();
 
   const socket = new WebSocket('wss://api.nuclino.com/syncing', {
@@ -101,9 +101,15 @@ function triggerUpdate(cell) {
     console.log(`new connection state: ${state}`);
     if (state === 'connected') {
       subscribeBrain(connection);
+    } else if (state === 'disconnected') {
+      startWatching();
     }
   });
 
   // restart every day to renew token
-  setTimeout(() => process.exit(1), 24 * 60 * 60 * 1000);
-})();
+  if (!killProcess) {
+    killProcess = setTimeout(() => process.exit(1), 24 * 60 * 60 * 1000);
+  }
+}
+
+startWatching();
