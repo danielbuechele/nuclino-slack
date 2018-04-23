@@ -17,6 +17,21 @@ function getHeaders(token) {
   };
 }
 
+function createBackup(token) {
+  console.log('Create backup');
+  fetch(
+    `https://files.nuclino.com/export/brains/${NUCLINO_BRAIN_ID}.zip?format=md`,
+    {
+      method: 'GET',
+      headers: getHeaders(token),
+    }
+  ).then(res => {
+    console.log(`downloaded backup`);
+    const fileStream = fs.createWriteStream('./backup.zip');
+    res.body.pipe(fileStream);
+  });
+}
+
 function updateToken() {
   const oldToken = fs
     .readFileSync(TOKEN_PATH)
@@ -38,39 +53,50 @@ function updateToken() {
     });
 }
 
+const visited = new Set();
+function traverseTree(connection, id) {
+  if (visited.has(id)) {
+    return;
+  }
+  visited.add(id);
+  subscribeCell(connection, id, cell => {
+    cell.data.childIds.map(id => traverseTree(connection, id));
+  });
+}
+
 function subscribeBrain(connection) {
   const brain = connection.get('ot_brain', NUCLINO_BRAIN_ID);
 
   brain.subscribe();
   brain.on('load', () => {
-    brain.data.cells.forEach(cell => subscribeCell(connection, cell));
-    console.log(`subscribet to ${brain.data.cells.length} cells`);
-  });
-
-  brain.on('op', () => {
-    brain.data.cells.forEach((name, i) => {
-      if (!cells[name]) {
-        subscribeCell(connection, name, cell => {
-          console.log(`Page created ${cell.data.title}`);
-        });
-      }
-    });
+    console.log(brain.data.mainCellId);
+    traverseTree(connection, brain.data.mainCellId);
   });
 }
 
 const cells = {};
 function subscribeCell(connection, name, cb) {
+  console.log('subscribe ' + name);
   const cell = connection.get('ot_cell', name);
   cell.subscribe();
   cells[name] = cell;
-  cell.on('op', () => triggerUpdate(cell));
+  cell.on('op', () => triggerUpdate(connection, cell));
   if (typeof cb === 'function') {
     cell.on('load', () => cb(cell));
   }
 }
 
 const timers = {};
-function triggerUpdate(cell) {
+function triggerUpdate(connection, cell) {
+  // check for new cells
+  for (let i = 0; i < cell.data.childIds.length; i++) {
+    if (!visited.has(cell.data.childIds[i])) {
+      console.log(`new page created ${cell.id}`);
+      subscribeCell(connection, cell.data.childIds[i]);
+      return;
+    }
+  }
+
   console.log(`updated cell ${cell.id}`);
   if (timers[cell.id]) {
     clearTimeout(timers[cell.id]);
@@ -91,6 +117,8 @@ function triggerUpdate(cell) {
 let killProcess = null;
 async function startWatching() {
   const token = await updateToken();
+
+  createBackup(token);
 
   const socket = new WebSocket('wss://api.nuclino.com/syncing', {
     headers: getHeaders(token),
