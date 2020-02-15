@@ -47,7 +47,7 @@ function updateToken() {
       const match = cookie.match(/token=([A-Za-z0-9+-\._]+)/);
       if (match && match.length > 0) {
         token = match[1];
-        fs.writeFile(TOKEN_PATH, token, 'utf8');
+        fs.writeFile(TOKEN_PATH, token, 'utf8', () => {});
       }
       return token;
     });
